@@ -1,0 +1,11 @@
+App(
+    appid="hdmi_monitor",
+    name="HDMI Link Monitor",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="hdmi_monitor_app",
+    requires=["gui", "notification"],
+    stack_size=2 * 1024,
+    fap_category="GPIO",
+    fap_version="0.1",
+    fap_description="Watches HDMI +5V and hot-plug in line, logs drops and can force a re-plug",
+)

@@ -11,6 +11,7 @@ Video Game Module.
 | Pixel Fixer app | Flipper app that runs a rapid colour-noise loop for stuck pixels and image retention | [`apps/pixel_fixer/`](apps/pixel_fixer/) |
 | EDID Reader app | Flipper app that reads and decodes a display's EDID, and checks HDCP and HDMI 2.0 support, through an HDMI breakout board | [`apps/edid_reader/`](apps/edid_reader/) |
 | CEC Tool app | Flipper app that monitors HDMI-CEC traffic and sends power, input and volume commands | [`apps/cec_tool/`](apps/cec_tool/) |
+| HDMI Link Monitor app | Flipper app that watches HDMI +5 V and hot-plug in line, logs drops and can force a re-plug | [`apps/hdmi_monitor/`](apps/hdmi_monitor/) |
 | IR converter | Browser page that converts Flipper `.ir` files to Pronto hex and Global Caché `sendir` | [`ir-converter/`](ir-converter/) |
 | BadUSB scripts | USB HID path test and keep-awake scripts | [`badusb/`](badusb/) |
 
@@ -41,6 +42,7 @@ The apps are built for Flipper firmware 1.5.1 (API 88.2). Rebuild them with
 | EDID Reader app: EDID read and decode | Working on real hardware; decoder also checked against `edid-decode` on 398 real EDIDs |
 | EDID Reader app: HDCP and HDMI 2.0 live check | Working on real hardware |
 | CEC Tool app | Working on real hardware: standby, power on and volume up/down confirmed on an Insignia Fire TV. Other commands and inline monitoring between two devices not yet confirmed |
+| HDMI Link Monitor app | Not yet run on hardware |
 | IR converter | Unit tests pass against known LG, Samsung and Sony codes; not yet fired at a real device |
 | BadUSB scripts | Written from the firmware's script documentation; not yet run |
 
