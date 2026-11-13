@@ -1,0 +1,11 @@
+App(
+    appid="edid_reader",
+    name="EDID Reader",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="edid_reader_app",
+    requires=["gui", "storage"],
+    stack_size=4 * 1024,
+    fap_category="GPIO",
+    fap_version="0.1",
+    fap_description="Reads and decodes a display's EDID through an HDMI breakout board",
+)
