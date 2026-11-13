@@ -1,0 +1,220 @@
+<title>Flipper IR Converter</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: one working column. Input on top, format bar, then one row per button with its code. */
+:root {
+  --bg: #F4F5F9; --surface: #FFFFFF; --fg: #1B1D2A; --muted: #5A5F78; --line: #D9DCE7;
+  --accent: #862AA8; --accent-fg: #FFFFFF; --accent-soft: #F1E4F6;
+  --warn-bg: #FBF0D9; --warn-fg: #6B4A00; --err-bg: #FBE3E1; --err-fg: #8A1C14;
+  --font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --font-body: Inter, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #14151D; --surface: #1D1F2B; --fg: #E8E9F2; --muted: #9DA1BA; --line: #303346;
+  --accent: #CB86EA; --accent-fg: #17121B; --accent-soft: #33243C;
+  --warn-bg: #3A2F12; --warn-fg: #F1D48A; --err-bg: #40201D; --err-fg: #F5B5AE; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #14151D; --surface: #1D1F2B; --fg: #E8E9F2; --muted: #9DA1BA; --line: #303346;
+  --accent: #CB86EA; --accent-fg: #17121B; --accent-soft: #33243C;
+  --warn-bg: #3A2F12; --warn-fg: #F1D48A; --err-bg: #40201D; --err-fg: #F5B5AE; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 880px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 22px; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: 26px; line-height: 1.15; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 16px; margin: 0; }
+p { margin: 0; }
+.lede { color: var(--muted); max-width: 62ch; margin-top: 6px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.grow { flex: 1 1 auto; min-width: 0; }
+label, .label { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+textarea, input[type="text"] { font-family: var(--font-mono); font-size: 13px; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+textarea { width: 100%; box-sizing: border-box; min-height: 150px; resize: vertical; }
+textarea.drag { border-color: var(--accent); background: var(--accent-soft); }
+input[type="text"] { width: 6ch; }
+button, .filebtn { font: 500 14px var(--font-body); color: var(--fg); background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; padding: 7px 12px; cursor: pointer; }
+button:hover, .filebtn:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.filebtn { text-transform: none; letter-spacing: 0; }
+.filebtn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.filebtn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; border-radius: 0; background: transparent; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
+.note { font-size: 13px; color: var(--muted); }
+.tag { font-size: 12px; font-weight: 600; background: var(--accent-soft); color: var(--fg); border-radius: 999px; padding: 2px 9px; }
+.list { display: flex; flex-direction: column; gap: 10px; }
+.item { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.item-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; }
+.item-name { font-family: var(--font-display); font-weight: 600; font-size: 16px; overflow-wrap: anywhere; }
+.item-meta { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.item-head button { margin-left: auto; padding: 4px 10px; font-size: 13px; }
+pre.code { margin: 0; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--bg); border-radius: 6px; padding: 9px 10px; max-height: 190px; overflow-y: auto; }
+pre.code.tall { max-height: 420px; }
+.msg { font-size: 13px; border-radius: 6px; padding: 7px 10px; }
+.msg.warn { background: var(--warn-bg); color: var(--warn-fg); }
+.msg.err { background: var(--err-bg); color: var(--err-fg); }
+dl.where { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; }
+dl.where dt { font-weight: 600; } dl.where dd { margin: 0; color: var(--muted); min-width: 0; }
+@media (max-width: 520px) { dl.where { grid-template-columns: 1fr; gap: 2px; } dl.where dd { margin-bottom: 8px; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Flipper IR Converter</h1>
+    <p class="lede">Turn a Flipper Zero <code>.ir</code> remote into Pronto hex or Global Caché <code>sendir</code> strings for control system drivers. Everything runs in this page; the file never leaves your browser.</p>
+  </header>
+
+  <section class="panel" aria-labelledby="in-h">
+    <div class="row">
+      <h2 id="in-h" class="grow">Remote file</h2>
+      <span class="tag" id="sample-tag">Example remote loaded</span>
+      <label class="filebtn">Open .ir file<input type="file" id="file" accept=".ir,.txt,text/plain"></label>
+    </div>
+    <textarea id="src" spellcheck="false" aria-label="Contents of the .ir file"></textarea>
+    <p class="note">Open a file, drop one on the box, or paste its text. On the Flipper's SD card, saved remotes are in <code>/infrared</code>.</p>
+  </section>
+
+  <section class="row" aria-label="Output format">
+    <div class="seg" role="group" aria-label="Format">
+      <button type="button" id="fmt-pronto" data-fmt="pronto" aria-pressed="true">Pronto hex</button>
+      <button type="button" id="fmt-sendir" data-fmt="sendir" aria-pressed="false">Global Caché</button>
+      <button type="button" id="fmt-lua" data-fmt="lua" aria-pressed="false">Q-SYS Lua table</button>
+    </div>
+    <span class="row" id="conn-wrap" hidden>
+      <label for="conn">Connector</label>
+      <input type="text" id="conn" value="1:1" maxlength="5" autocomplete="off">
+    </span>
+    <span class="grow"></span>
+    <span class="note" id="count"></span>
+    <button type="button" class="primary" id="copy-all">Copy all</button>
+  </section>
+
+  <section class="list" id="out" aria-live="polite"></section>
+
+  <section class="panel" aria-labelledby="where-h">
+    <h2 id="where-h">Where each format goes</h2>
+    <dl class="where">
+      <dt>Crestron</dt><dd>Pronto hex, one function at a time, into the IR driver editor to build the <code>.ir</code> driver.</dd>
+      <dt>Q-SYS</dt><dd>Global Caché strings sent over TCP port 4998 to an iTach or Flex, each ending in a carriage return. The Lua table is ready to paste into a script.</dd>
+      <dt>Extron</dt><dd>No text import. Play the saved button from the Flipper into the IR Learner instead.</dd>
+    </dl>
+    <p class="note">Parsed buttons are rebuilt from the same timings the Flipper firmware transmits. NEC codes include the standard repeat frame; Sony codes repeat three times and Pioneer twice, as the protocols require.</p>
+  </section>
+</div>
+
+<script>
+/*IRCONV*/
+</script>
+<script>
+(function () {
+  var SAMPLE = [
+    'Filetype: IR signals file', 'Version: 1', '#',
+    'name: Power', 'type: parsed', 'protocol: NEC', 'address: 04 00 00 00', 'command: 08 00 00 00', '#',
+    'name: HDMI_1', 'type: parsed', 'protocol: NEC', 'address: 04 00 00 00', 'command: CE 00 00 00', '#',
+    'name: Samsung_Power', 'type: parsed', 'protocol: Samsung32', 'address: 07 00 00 00', 'command: 02 00 00 00', '#',
+    'name: Sony_Power', 'type: parsed', 'protocol: SIRC', 'address: 01 00 00 00', 'command: 15 00 00 00', '#',
+    'name: Learned_raw', 'type: raw', 'frequency: 38000', 'duty_cycle: 0.330000',
+    'data: 504 3432 502 483 500 484 510 502 502 482 501 485 509 1452 504 1458 509 1452 504 481 501 474 509 3420 503', ''
+  ].join('\n');
+
+  var $ = function (id) { return document.getElementById(id); };
+  var src = $('src'), out = $('out'), fmt = 'pronto', rows = [];
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+
+  function meta(s, e) {
+    var khz = e.freq ? (e.freq / 1000) + ' kHz' : '';
+    if (s.type === 'raw') return 'raw · ' + (s.data ? s.data.length : 0) + ' timings · ' + khz;
+    return (s.protocol || '?') + ' · addr ' + (s.addressHex || '?') + ' · cmd ' + (s.commandHex || '?') + (khz ? ' · ' + khz : '');
+  }
+
+  function copy(text, btn, pre) {
+    var done = function () { var t = btn.textContent; btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = t; }, 1200); };
+    var fallback = function () {
+      if (pre) { var r = document.createRange(); r.selectNodeContents(pre); var sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+      btn.textContent = 'Selected, press Ctrl+C';
+    };
+    try { navigator.clipboard.writeText(text).then(done, fallback); } catch (e) { fallback(); }
+  }
+
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
+
+  function render() {
+    var conn = /^\d+:\d+$/.test($('conn').value.trim()) ? $('conn').value.trim() : '1:1';
+    var signals = IrConv.parseIr(src.value);
+    rows = [];
+    out.textContent = '';
+    $('conn-wrap').hidden = fmt === 'pronto';
+    if (!signals.length) {
+      out.appendChild(el('div', 'msg err', 'No buttons found. A Flipper remote file has a "name:" line for each button.'));
+      $('count').textContent = ''; return;
+    }
+    signals.forEach(function (s, i) {
+      var e = IrConv.encode(s), row = { name: s.name, meta: meta(s, e), error: e.error, warn: e.warn };
+      if (!e.error) { row.pronto = IrConv.toPronto(e); row.sendir = IrConv.toSendir(e, conn, i + 1); }
+      rows.push(row);
+    });
+    var good = rows.filter(function (r) { return !r.error; });
+    $('count').textContent = good.length + ' of ' + rows.length + ' buttons converted';
+
+    if (fmt === 'lua') {
+      var item = el('div', 'item'), pre = el('pre', 'code tall', IrConv.toQsysLua(good));
+      item.appendChild(pre); out.appendChild(item);
+    }
+    rows.forEach(function (r) {
+      if (fmt === 'lua' && !r.error && !r.warn) return;
+      var item = el('div', 'item'), head = el('div', 'item-head');
+      head.appendChild(el('span', 'item-name', r.name));
+      head.appendChild(el('span', 'item-meta', r.meta));
+      item.appendChild(head);
+      if (r.error) item.appendChild(el('div', 'msg err', r.error));
+      else if (fmt !== 'lua') {
+        var pre = el('pre', 'code', r[fmt]), btn = el('button', '', 'Copy');
+        btn.type = 'button';
+        btn.addEventListener('click', function () { copy(r[fmt], btn, pre); });
+        head.appendChild(btn); item.appendChild(pre);
+      }
+      if (r.warn) item.appendChild(el('div', 'msg warn', r.warn));
+      out.appendChild(item);
+    });
+  }
+
+  function allText() {
+    var good = rows.filter(function (r) { return !r.error; });
+    if (fmt === 'lua') return IrConv.toQsysLua(good);
+    return good.map(function (r) { return r.name + '\n' + r[fmt]; }).join('\n\n');
+  }
+
+  function setFmt(f) {
+    fmt = f;
+    document.querySelectorAll('.seg button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.fmt === f)); });
+    store('irconv.fmt', f); render();
+  }
+  function load(text) { src.value = text; $('sample-tag').hidden = true; render(); }
+  function readFile(f) { if (!f) return; var r = new FileReader(); r.onload = function () { load(String(r.result)); }; r.readAsText(f); }
+
+  document.querySelectorAll('.seg button').forEach(function (b) { b.addEventListener('click', function () { setFmt(b.dataset.fmt); }); });
+  $('file').addEventListener('change', function (e) { readFile(e.target.files[0]); e.target.value = ''; });
+  src.addEventListener('input', function () { $('sample-tag').hidden = true; render(); });
+  src.addEventListener('dragover', function (e) { e.preventDefault(); src.classList.add('drag'); });
+  src.addEventListener('dragleave', function () { src.classList.remove('drag'); });
+  src.addEventListener('drop', function (e) { e.preventDefault(); src.classList.remove('drag'); readFile(e.dataTransfer.files[0]); });
+  $('conn').addEventListener('input', function () { store('irconv.conn', $('conn').value); render(); });
+  $('copy-all').addEventListener('click', function () { copy(allText(), $('copy-all'), out.querySelector('pre')); });
+
+  var savedConn = store('irconv.conn'); if (savedConn) $('conn').value = savedConn;
+  var savedFmt = store('irconv.fmt');
+  src.value = SAMPLE;
+  setFmt(savedFmt === 'sendir' || savedFmt === 'lua' ? savedFmt : 'pronto');
+})();
+</script>

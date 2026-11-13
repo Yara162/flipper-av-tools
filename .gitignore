@@ -1,0 +1,5 @@
+firmware/work/
+apps/*/dist/
+apps/*/.vscode/
+.ufbt/
+node_modules/

@@ -1,0 +1,11 @@
+App(
+    appid="vgm_tpg",
+    name="VGM Test Patterns",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="vgm_tpg_app",
+    requires=["gui"],
+    stack_size=2 * 1024,
+    fap_category="GPIO",
+    fap_version="0.1",
+    fap_description="Controls the test pattern generator firmware on the Video Game Module",
+)

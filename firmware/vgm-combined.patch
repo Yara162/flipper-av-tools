@@ -1,0 +1,548 @@
+diff -ruN a/app/CMakeLists.txt b/app/CMakeLists.txt
+--- a/app/CMakeLists.txt	2026-11-13 00:51:34.401895667 +0000
++++ b/app/CMakeLists.txt	2026-11-13 00:51:34.403619048 +0000
+@@ -93,27 +93,3 @@
+ 
+ set_property(SOURCE "cli/cli_command_device_info.cpp" APPEND PROPERTY COMPILE_OPTIONS ${INFO_FLAGS})
+ 
+-set(FW_NAME "vgm-fw")
+-set(FW_PATH "${CMAKE_SOURCE_DIR}/build/app")
+-set(FW_NEW_PATH "${FW_PATH}/${FW_NAME}-${FW_GIT_TAG}")
+-set(FW_PATH_UF2 "${FW_NEW_PATH}.uf2")
+-set(FW_PATH_ELF "${FW_NEW_PATH}.elf")
+-set(FW_PATH_BIN "${FW_NEW_PATH}.bin")
+-
+-ADD_CUSTOM_COMMAND(TARGET firmware POST_BUILD
+-                   COMMAND ${CMAKE_COMMAND} -E copy
+-                       	"${FW_PATH}/firmware.uf2"
+-                       	${FW_PATH_UF2}
+-                   COMMENT "Copying 'firmware.uf2' to '${FW_PATH_UF2}'")
+-
+-ADD_CUSTOM_COMMAND(TARGET firmware POST_BUILD
+-				   COMMAND ${CMAKE_COMMAND} -E copy
+-					   	"${FW_PATH}/firmware.elf"
+-					   	${FW_PATH_ELF}
+-				   COMMENT "Copying 'firmware.elf' to '${FW_PATH_ELF}'")
+-
+-ADD_CUSTOM_COMMAND(TARGET firmware POST_BUILD
+-				   COMMAND ${CMAKE_COMMAND} -E copy
+-					   	"${FW_PATH}/firmware.bin"
+-					   	${FW_PATH_BIN}
+-				   COMMENT "Copying 'firmware.bin' to '${FW_PATH_BIN}'")
+\ No newline at end of file
+diff -ruN a/app/frame.c b/app/frame.c
+--- a/app/frame.c	2026-11-13 00:51:34.135684008 +0000
++++ b/app/frame.c	2026-11-13 00:51:34.139026901 +0000
+@@ -5,13 +5,16 @@
+ #include <pico/multicore.h>
+ #include <hardware/vreg.h>
+ #include <string.h>
++#include <hardware/watchdog.h>
++#include <hardware/structs/watchdog.h>
+ #include "frame.h"
++#include "tpg.h"
+ 
+ #define FRAME_WIDTH 320
+ #define FRAME_HEIGHT 240
+ 
+ static struct dvi_inst dvi0;
+-static uint16_t framebuf[FRAME_WIDTH * 2];
++static uint16_t framebuf[TPG_MAX_W * 2];
+ 
+ #define COLOR_BG 0xFC00
+ #define COLOR_FG 0x0000
+@@ -24,10 +27,33 @@
+ uint16_t color_bg = COLOR_BG;
+ uint16_t color_fg = COLOR_FG;
+ 
+-// TMDS bit clock 252 MHz
+-// DVDD 1.2V (1.1V seems ok too)
+-#define VREG_VSEL VREG_VOLTAGE_1_20
+-#define DVI_TIMING dvi_timing_640x480p_60hz
++// Video modes. Mode 0 (TMDS bit clock 252 MHz, DVDD 1.2V) is the stock one and the only
++// one used for mirroring the Flipper screen; the others are for test patterns.
++// CEA-861 480p (VIC 2/3) is not in this version of the DVI library.
++static const struct dvi_timing timing_720x480p_60hz = {
++    .h_sync_polarity = false, .h_front_porch = 16, .h_sync_width = 62, .h_back_porch = 60, .h_active_pixels = 720,
++    .v_sync_polarity = false, .v_front_porch = 9,  .v_sync_width = 6,  .v_back_porch = 30, .v_active_lines = 480,
++    .bit_clk_khz = 270000};
++
++typedef struct {
++    const struct dvi_timing* timing;
++    enum vreg_voltage vreg;
++    uint16_t w, h, fps;
++    const char* name;
++} frame_mode_t;
++
++static const frame_mode_t frame_modes[] = {
++    {&dvi_timing_640x480p_60hz, VREG_VOLTAGE_1_20, 320, 240, 60, "640x480 60Hz"},
++    {&timing_720x480p_60hz, VREG_VOLTAGE_1_20, 360, 240, 60, "720x480 60Hz"},
++    {&dvi_timing_1280x720p_30hz, VREG_VOLTAGE_1_25, 640, 360, 30, "1280x720 30Hz"},
++};
++#define FRAME_MODE_COUNT (sizeof(frame_modes) / sizeof(frame_modes[0]))
++#define SCRATCH_MAGIC 0x7A5Eu
++
++static uint8_t mode_index = 0;
++static const frame_mode_t* mode = &frame_modes[0];
++static volatile bool tpg_active = false;
++static TpgState tpg_boot_state;
+ 
+ typedef struct {
+     frame_t frame;
+@@ -99,6 +125,19 @@
+ static void __not_in_flash("core1_scanline_callback") core1_scanline_callback() {
+     static uint scanline = 0;
+ 
++    if(tpg_active || mode_index != 0) {
++        // Two lines are always in flight ahead of the one being displayed, so the line
++        // queued now lands two rows below the current one.
++        uint16_t* discard;
++        while(queue_try_remove_u32(&dvi0.q_colour_free, &discard))
++            ;
++        uint y = (dvi0.timing_state.v_ctr / DVI_VERTICAL_REPEAT + 2) % mode->h;
++        uint16_t* line = tpg_scanline((int)y);
++        queue_add_blocking_u32(&dvi0.q_colour_valid, &line);
++        scanline = 0;
++        return;
++    }
++
+     if(scanline == 0) {
+         if(mutex_try_enter(&data_mutex, NULL)) {
+             memcpy(&current, &next, sizeof(frame_data_t));
+@@ -133,24 +172,25 @@
+ }
+ 
+ void frame_init() {
+-    dvi0.timing = &DVI_TIMING;
++    tpg_init(mode->w, mode->h, mode->fps, mode->name, &tpg_boot_state);
++    dvi0.timing = mode->timing;
+     dvi0.ser_cfg = picodvi_dvi_cfg;
+     dvi0.scanline_callback = core1_scanline_callback;
+     dvi_init(&dvi0, next_striped_spin_lock_num(), next_striped_spin_lock_num());
+ 
+     // add two scanlines to the scanlines queue
+     queue_add_blocking_u32(&dvi0.q_colour_valid, &framebuf[0]);
+-    queue_add_blocking_u32(&dvi0.q_colour_valid, &framebuf[FRAME_WIDTH]);
++    queue_add_blocking_u32(&dvi0.q_colour_valid, &framebuf[TPG_MAX_W]);
+ 
+     multicore_launch_core1(core1_main);
+ }
+ 
+ uint32_t frame_get_clock() {
+-    return DVI_TIMING.bit_clk_khz;
++    return mode->timing->bit_clk_khz;
+ }
+ 
+ uint32_t frame_get_voltage() {
+-    return VREG_VSEL;
++    return mode->vreg;
+ }
+ 
+ void frame_parse_data(uint8_t orientation, const frame_t* frame, uint32_t timeout_ms) {
+@@ -165,3 +205,56 @@
+     color_bg = bg;
+     color_fg = fg;
+ }
++
++
++// --- Test pattern support ---
++
++bool frame_boot_config(void) {
++    // A mode change arrives as a watchdog reboot with the wanted state in the scratch
++    // registers. A power cycle clears them, so the module always powers up mirroring.
++    uint32_t scratch = watchdog_hw->scratch[0];
++    watchdog_hw->scratch[0] = 0;
++    memset(&tpg_boot_state, 0, sizeof(tpg_boot_state));
++    tpg_boot_state.overlay = 1;
++    strcpy(tpg_boot_state.label, "FLIPPER TPG");
++    if((scratch >> 16) != SCRATCH_MAGIC) return false;
++    uint8_t m = scratch & 0xff, p = (scratch >> 8) & 0x7f;
++    if(m >= FRAME_MODE_COUNT || p >= TpgPatternCount) return false;
++    mode_index = m;
++    mode = &frame_modes[m];
++    tpg_boot_state.mode = m;
++    tpg_boot_state.pattern = p;
++    tpg_boot_state.overlay = (scratch >> 15) & 1;
++    memcpy(tpg_boot_state.label, &watchdog_hw->scratch[1], TPG_LABEL_MAX);
++    tpg_boot_state.label[TPG_LABEL_MAX] = 0;
++    for(char* c = tpg_boot_state.label; *c; c++)
++        if(*c < 32 || *c > 126) *c = '?';
++    tpg_active = true;
++    return true;
++}
++
++uint8_t frame_get_mode(void) {
++    return mode_index;
++}
++
++bool frame_mode_valid(uint8_t m) {
++    return m < FRAME_MODE_COUNT;
++}
++
++void frame_tpg_set_active(bool active) {
++    tpg_active = active;
++}
++
++void frame_reboot(const TpgState* state) {
++    if(state) {
++        char label[TPG_LABEL_MAX] = {0};
++        strncpy(label, state->label, TPG_LABEL_MAX);
++        memcpy(&watchdog_hw->scratch[1], label, TPG_LABEL_MAX);
++        watchdog_hw->scratch[0] = (SCRATCH_MAGIC << 16) | ((uint32_t)(state->overlay ? 1 : 0) << 15) |
++                                  ((uint32_t)state->pattern << 8) | state->mode;
++    } else {
++        watchdog_hw->scratch[0] = 0;
++    }
++    watchdog_reboot(0, 0, 10);
++    while(1) tight_loop_contents();
++}
+diff -ruN a/app/frame.h b/app/frame.h
+--- a/app/frame.h	2026-11-13 00:51:34.145689144 +0000
++++ b/app/frame.h	2026-11-13 00:51:34.147205989 +0000
+@@ -20,4 +20,21 @@
+ 
+ void frame_parse_data(uint8_t orientation, const frame_t* frame, uint32_t timeout_ms);
+ 
+-void frame_set_color(uint16_t bg, uint16_t fg);
+\ No newline at end of file
++void frame_set_color(uint16_t bg, uint16_t fg);
++
++// --- Test pattern support ---
++#include <stdbool.h>
++#include "tpg.h"
++
++// Reads the mode requested before the last reboot. Call before frame_get_clock().
++// Returns true if the module should start in test pattern mode.
++bool frame_boot_config(void);
++
++uint8_t frame_get_mode(void);
++
++bool frame_mode_valid(uint8_t mode);
++
++void frame_tpg_set_active(bool active);
++
++// Restart into the given test pattern state, or into normal mirroring if NULL.
++void frame_reboot(const TpgState* state);
+diff -ruN a/app/led_state.c b/app/led_state.c
+--- a/app/led_state.c	2026-11-13 00:51:34.386782036 +0000
++++ b/app/led_state.c	2026-11-13 00:51:34.388233572 +0000
+@@ -7,6 +7,7 @@
+ typedef enum {
+     LED_STATE_WAIT,
+     LED_STATE_ACTIVE,
++    LED_STATE_TPG,
+ } led_state_t;
+ 
+ volatile static led_state_t led_state = LED_STATE_WAIT;
+@@ -30,6 +31,10 @@
+             leds(false, true, false);
+             vTaskDelay(pdMS_TO_TICKS(500));
+             break;
++        case LED_STATE_TPG:
++            leds(false, true, true);
++            vTaskDelay(pdMS_TO_TICKS(250));
++            break;
+         default:
+             break;
+         }
+@@ -51,4 +56,8 @@
+ 
+ void led_state_active(void) {
+     led_state = LED_STATE_ACTIVE;
+-}
+\ No newline at end of file
++}
++
++void led_state_tpg(void) {
++    led_state = LED_STATE_TPG;
++}
+diff -ruN a/app/led_state.h b/app/led_state.h
+--- a/app/led_state.h	2026-11-13 00:51:34.394010707 +0000
++++ b/app/led_state.h	2026-11-13 00:51:34.395786492 +0000
+@@ -11,6 +11,8 @@
+ 
+ void led_state_active(void);
+ 
++void led_state_tpg(void);
++
+ #ifdef __cplusplus
+ }
+ #endif
+\ No newline at end of file
+diff -ruN a/app/main.c b/app/main.c
+--- a/app/main.c	2026-11-13 00:51:34.153465016 +0000
++++ b/app/main.c	2026-11-13 00:51:34.363684022 +0000
+@@ -6,6 +6,7 @@
+ #include <hardware/irq.h>
+ #include <hardware/sync.h>
+ #include <hardware/vreg.h>
++#include <hardware/structs/ssi.h>
+ #include <pico/sem.h>
+ #include <FreeRTOS.h>
+ #include <task.h>
+@@ -16,14 +17,31 @@
+ #include "usb.h"
+ #include "bitmaps.h"
+ 
++// FreeRTOS tick timing follows the video mode's system clock
++uint32_t g_sys_clock_hz = 252000000;
++
++// Change the flash (XIP) clock divider. Runs from RAM because flash is briefly unavailable.
++static void __no_inline_not_in_flash_func(flash_set_clkdiv)(uint32_t div) {
++    uint32_t ints = save_and_disable_interrupts();
++    ssi_hw->ssienr = 0;
++    ssi_hw->baudr = div;
++    ssi_hw->ssienr = 1;
++    restore_interrupts(ints);
++}
++
+ static void init() {
+     led_init();
+ 
++    uart_protocol_set_boot_tpg(frame_boot_config());
++
+     sleep_ms(10);
+     vreg_set_voltage(frame_get_voltage());
+ 
+     sleep_ms(10);
++    // The overclocked 720p test mode would push the flash clock past the chip's limit
++    if(frame_get_clock() > 270000) flash_set_clkdiv(4);
+     set_sys_clock_khz(frame_get_clock(), true);
++    g_sys_clock_hz = frame_get_clock() * 1000UL;
+ 
+     stdio_init_all();
+     frame_init();
+diff -ruN a/app/uart.c b/app/uart.c
+--- a/app/uart.c	2026-11-13 00:51:34.371612999 +0000
++++ b/app/uart.c	2026-11-13 00:51:34.373308289 +0000
+@@ -6,6 +6,8 @@
+ #include <task.h>
+ #include <stream_buffer.h>
+ #include <stdlib.h>
++#include <string.h>
++#include <stdio.h>
+ 
+ #include <pb_common.h>
+ #include <pb_encode.h>
+@@ -22,7 +24,8 @@
+ #define UART_TX_PIN 0
+ #define UART_RX_PIN 1
+ #define UART_INIT_BAUD_RATE (9600UL)
+-#define UART_BAUD_RATE (1843200UL)
++// Same link settings as the shipped 0.1.0 release (the dev branch doubles the rate and enables the FIFO)
++#define UART_BAUD_RATE (921600UL)
+ 
+ #define EXPANSION_MODULE_TIMEOUT_MS (EXPANSION_PROTOCOL_TIMEOUT_MS - 50UL)
+ #define EXPANSION_MODULE_STARTUP_DELAY_MS (250UL)
+@@ -31,12 +34,136 @@
+ static StreamBufferHandle_t stream;
+ static PB_Main rpc_message;
+ 
++// --- Test pattern control ---
++// While the link idles at 9600 baud, the Flipper app can send text lines:
++//   S,<mode>,<pattern>,<overlay 0|1>,<label>\n      reply: K,<mode>,<pattern>\n
++// Lines keep the module in test pattern mode; when they stop it returns to mirroring.
++#define TPG_SESSION_TIMEOUT_MS (2000UL)
++#define TPG_LINE_MAX (40)
++
++static volatile bool tpg_listen = false; // true while the UART is at the initial baud rate
++static volatile uint32_t tpg_rx_seq = 0;
++static volatile TickType_t tpg_rx_time = 0;
++static TpgState tpg_rx_state;
++static bool tpg_boot_active = false;
++
++// Parse "P,<mode>,<chunk>,<hold>": the pixel-fixer noise pattern
++static void tpg_parse_pixel_line(const char* line) {
++    unsigned v[3] = {0, 0, 0};
++    const char* p = line + 2;
++    for(int i = 0; i < 3; i++) {
++        if(*p < '0' || *p > '9') return;
++        while(*p >= '0' && *p <= '9') v[i] = v[i] * 10 + (unsigned)(*p++ - '0');
++        if(i < 2 && *p++ != ',') return;
++    }
++    if(*p != 0) return;
++    if(v[0] > 255 || !frame_mode_valid((uint8_t)v[0])) return;
++    if(v[1] < 2 || v[1] > 128 || v[2] < 1 || v[2] > 120) return;
++    memset(&tpg_rx_state, 0, sizeof(tpg_rx_state));
++    tpg_rx_state.mode = (uint8_t)v[0];
++    tpg_rx_state.pattern = TpgPixelFix;
++    tpg_rx_state.chunk = (uint8_t)v[1];
++    tpg_rx_state.hold = (uint8_t)v[2];
++    tpg_rx_seq++;
++    tpg_rx_time = xTaskGetTickCountFromISR();
++}
++
++static void tpg_parse_line(const char* line) {
++    if(line[0] == 'P' && line[1] == ',') {
++        tpg_parse_pixel_line(line);
++        return;
++    }
++    if(line[0] != 'S' || line[1] != ',') return;
++    unsigned v[3] = {0, 0, 0};
++    const char* p = line + 2;
++    for(int i = 0; i < 3; i++) {
++        if(*p < '0' || *p > '9') return;
++        while(*p >= '0' && *p <= '9') v[i] = v[i] * 10 + (unsigned)(*p++ - '0');
++        if(*p++ != ',') return;
++    }
++    if(v[0] > 255 || !frame_mode_valid((uint8_t)v[0]) || v[1] >= TpgPixelFix) return;
++    memset(&tpg_rx_state, 0, sizeof(tpg_rx_state));
++    tpg_rx_state.mode = (uint8_t)v[0];
++    tpg_rx_state.pattern = (uint8_t)v[1];
++    tpg_rx_state.overlay = v[2] ? 1 : 0;
++    strncpy(tpg_rx_state.label, p, TPG_LABEL_MAX);
++    tpg_rx_seq++;
++    tpg_rx_time = xTaskGetTickCountFromISR();
++}
++
++// Called from the RX interrupt for every byte received at the initial baud rate
++static void tpg_detect_byte(uint8_t ch) {
++    static char line[TPG_LINE_MAX];
++    static size_t len = 0;
++    if(ch == '\n' || ch == '\r') {
++        line[len] = 0;
++        if(len) tpg_parse_line(line);
++        len = 0;
++    } else if(ch < 32 || ch > 126 || len >= TPG_LINE_MAX - 1) {
++        len = 0;
++    } else {
++        line[len++] = (char)ch;
++    }
++}
++
++static bool tpg_requested(void) {
++    if(tpg_boot_active) return true;
++    if(tpg_rx_seq == 0) return false;
++    // read the receive time first: the interrupt may update it at any moment
++    const TickType_t last = tpg_rx_time;
++    return (xTaskGetTickCount() - last) < pdMS_TO_TICKS(TPG_SESSION_TIMEOUT_MS);
++}
++
++static void tpg_session(void) {
++    uint32_t seen = tpg_boot_active ? tpg_rx_seq : tpg_rx_seq - 1;
++    TickType_t started = xTaskGetTickCount();
++    bool boot = tpg_boot_active;
++    tpg_boot_active = false;
++
++    led_state_tpg();
++    frame_tpg_set_active(true);
++
++    while(true) {
++        // after a mode-change reboot, give the app time to send its next line
++        boot = boot && tpg_rx_seq == seen;
++        // read the receive time before the current time: the interrupt may update it
++        const TickType_t last = boot ? started : tpg_rx_time;
++        if((xTaskGetTickCount() - last) >= pdMS_TO_TICKS(TPG_SESSION_TIMEOUT_MS)) break;
++
++        if(tpg_rx_seq != seen) {
++            TpgState state;
++            irq_set_enabled(UART_IRQ, false);
++            state = tpg_rx_state;
++            seen = tpg_rx_seq;
++            irq_set_enabled(UART_IRQ, true);
++
++            if(state.mode != frame_get_mode()) frame_reboot(&state);
++            while(!tpg_submit(&state)) vTaskDelay(1);
++
++            char reply[16];
++            snprintf(reply, sizeof(reply), "K,%u,%u\n", state.mode, state.pattern);
++            uart_puts(UART_ID, reply);
++        }
++
++        // discard whatever piled up for the expansion protocol
++        uint8_t dump[16];
++        while(xStreamBufferReceive(stream, dump, sizeof(dump), 0) > 0)
++            ;
++        vTaskDelay(pdMS_TO_TICKS(10));
++    }
++
++    // Mirroring only runs in the stock video mode
++    if(frame_get_mode() != 0) frame_reboot(NULL);
++    frame_tpg_set_active(false);
++}
++
+ // RX interrupt handler
+ static void uart_on_rx() {
+     BaseType_t higher_priority_task_woken = pdFALSE;
+ 
+     while(uart_is_readable(UART_ID)) {
+         const uint8_t ch = uart_getc(UART_ID);
++        if(tpg_listen) tpg_detect_byte(ch);
+         xStreamBufferSendFromISR(stream, &ch, sizeof(ch), &higher_priority_task_woken);
+     }
+ 
+@@ -291,6 +418,7 @@
+         ExpansionFrame frame;
+         if(!expansion_receive_frame(&frame)) break;
+         if(!expansion_is_success_frame(&frame)) break;
++        tpg_listen = false;
+         uart_set_baudrate(UART_ID, UART_BAUD_RATE);
+         vTaskDelay(pdMS_TO_TICKS(EXPANSION_PROTOCOL_BAUD_CHANGE_DT_MS));
+         success = true;
+@@ -458,8 +586,8 @@
+     gpio_set_pulls(UART_RX_PIN, true, false);
+     gpio_set_pulls(UART_TX_PIN, true, false);
+ 
+-    // enable uart fifo
+-    uart_set_fifo_enabled(UART_ID, true);
++    // disable uart fifo
++    uart_set_fifo_enabled(UART_ID, false);
+ 
+     // config uart for 8N1 transmission
+     uart_set_format(UART_ID, 8, 1, UART_PARITY_NONE);
+@@ -482,7 +610,15 @@
+         led_state_wait();
+ 
+         // reset baud rate to initial value
+-        uart_set_baudrate(UART_ID, UART_INIT_BAUD_RATE);
++        // Only touch the baud rate when coming back from the fast rate: rewriting it
++        // resets the receiver and would cut an incoming test pattern command in half.
++        if(!tpg_listen) uart_set_baudrate(UART_ID, UART_INIT_BAUD_RATE);
++        tpg_listen = true;
++        // the Flipper app asked for test patterns: serve it until it goes quiet
++        if(tpg_requested()) {
++            tpg_session();
++            continue;
++        }
+         // announce presence (one pulse high -> low)
+         uart_putc_raw(UART_ID, 0xF0);
+ 
+@@ -513,6 +649,10 @@
+     }
+ }
+ 
++void uart_protocol_set_boot_tpg(bool active) {
++    tpg_boot_active = active;
++}
++
+ void uart_protocol_init(void) {
+     TaskHandle_t uart_task_handle = NULL;
+     BaseType_t status = xTaskCreate(uart_task, "uart_task", 4 * 1024, NULL, 1, &uart_task_handle);
+diff -ruN a/app/uart.h b/app/uart.h
+--- a/app/uart.h	2026-11-13 00:51:34.379145233 +0000
++++ b/app/uart.h	2026-11-13 00:51:34.379684023 +0000
+@@ -1,3 +1,6 @@
+ #pragma once
+ 
+-void uart_protocol_init(void);
+\ No newline at end of file
++void uart_protocol_init(void);
++#include <stdbool.h>
++// Start in test pattern mode (after a resolution-change reboot)
++void uart_protocol_set_boot_tpg(bool active);
+diff -ruN a/config/FreeRTOSConfig.h b/config/FreeRTOSConfig.h
+--- a/config/FreeRTOSConfig.h	2026-11-13 00:51:34.409703750 +0000
++++ b/config/FreeRTOSConfig.h	2026-11-13 00:51:34.411449681 +0000
+@@ -35,7 +35,11 @@
+ #define configUSE_TIME_SLICING                  1           // Allow FreeRTOS to switch tasks at each tick
+ #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
+ #define configUSE_TICKLESS_IDLE                 0
+-#define configCPU_CLOCK_HZ                      252000000   // cpu clock from according dvi config
++#ifndef __ASSEMBLER__
++#include <stdint.h>
++extern uint32_t g_sys_clock_hz;
++#endif
++#define configCPU_CLOCK_HZ                      g_sys_clock_hz   // follows the selected video mode
+ #define configTICK_RATE_HZ                      1000        // FreeRTOS beats per second
+ #define configMAX_PRIORITIES                    5           // Max number of priority values (0-24)
+ #define configMINIMAL_STACK_SIZE                128

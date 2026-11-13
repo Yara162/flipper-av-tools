@@ -1,0 +1,23 @@
+REM USB HID path test, Windows version: opens Notepad first so nothing needs to be focused.
+REM Pass = Notepad opens, all lines appear intact and the pointer draws a square.
+DEFAULT_DELAY 50
+DELAY 1500
+GUI r
+DELAY 700
+STRINGLN notepad
+DELAY 1500
+STRINGLN USB HID PATH TEST - keyboard OK
+STRINGLN abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789
+STRINGLN If this line is complete, no keystrokes were dropped.
+MOUSEMOVE 100 0
+DELAY 300
+MOUSEMOVE 0 100
+DELAY 300
+MOUSEMOVE -100 0
+DELAY 300
+MOUSEMOVE 0 -100
+DELAY 300
+MOUSESCROLL 3
+DELAY 300
+MOUSESCROLL -3
+STRINGLN Mouse move and scroll sent. Test complete.

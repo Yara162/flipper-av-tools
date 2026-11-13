@@ -1,0 +1,11 @@
+App(
+    appid="pixel_fixer",
+    name="Pixel Fixer",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="pixel_fixer_app",
+    requires=["gui"],
+    stack_size=2 * 1024,
+    fap_category="GPIO",
+    fap_version="0.1",
+    fap_description="Rapid colour-noise loop on the Video Game Module for stuck pixels and image retention",
+)
