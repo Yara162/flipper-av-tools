@@ -1,0 +1,11 @@
+App(
+    appid="cec_tool",
+    name="CEC Tool",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="cec_tool_app",
+    requires=["gui"],
+    stack_size=4 * 1024,
+    fap_category="GPIO",
+    fap_version="0.1",
+    fap_description="HDMI-CEC monitor and controller for use with an HDMI breakout board",
+)

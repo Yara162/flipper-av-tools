@@ -262,7 +262,14 @@ static void decode_cta(const uint8_t* b, Out* o, EdidInfo* info) {
             if(mhz > info->max_tmds_mhz) info->max_tmds_mhz = mhz;
             out_line(o, "HDMI 2.x: yes");
             if(mhz) out_line(o, "Max TMDS: %u MHz", mhz);
-            out_line(o, "SCDC: %s", (p[5] & 0x80) ? "yes" : "no");
+            info->scdc = (p[5] & 0x80) != 0;
+            out_line(o, "SCDC: %s", info->scdc ? "yes" : "no");
+            if(len >= 7 && (p[6] >> 4)) {
+                static const uint8_t frl_gbps[] = {0, 9, 18, 24, 32, 40, 48};
+                uint8_t rate = p[6] >> 4;
+                info->max_frl_gbps = rate < 7 ? frl_gbps[rate] : 48;
+                out_line(o, "HDMI 2.1 FRL: %u Gbps", info->max_frl_gbps);
+            }
         } else if(tag == 7 && len >= 1) { // extended tags
             uint8_t ext = p[0];
             if(ext == 6 && len >= 2) { // HDR static metadata
@@ -322,5 +329,40 @@ void edid_decode(const uint8_t* data, size_t blocks, char* out, size_t out_size,
         out_line(&o, "4K 30Hz: %s", info->vic_4k30 || info->vic_4k60 ? "yes" : "no");
         out_line(&o, "4K 60Hz: %s", info->vic_4k60 ? "yes" : info->only_420_4k60 ? "4:2:0 only" : "no");
         out_line(&o, "HDR10: %s  Audio: %s", info->hdr10 ? "yes" : "no", info->audio ? "yes" : "no");
+    }
+}
+
+bool hdcp_bksv_valid(const uint8_t* bksv) {
+    int ones = 0;
+    for(int i = 0; i < 5; i++)
+        for(int b = 0; b < 8; b++) ones += (bksv[i] >> b) & 1;
+    return ones == 20;
+}
+
+void edid_format_live(const HdcpProbe* hdcp, const ScdcProbe* scdc, char* out, size_t out_size) {
+    size_t used = strlen(out);
+    Out o = {.buf = out, .size = out_size, .len = used};
+    out_line(&o, "-- Live check --");
+    if(!hdcp->port_ack) {
+        out_line(&o, "HDCP: no reply");
+        out_line(&o, " (none, or display is");
+        out_line(&o, " off or on another input)");
+    } else {
+        if(hdcp_bksv_valid(hdcp->bksv)) {
+            out_line(&o, "HDCP 1.4: yes");
+            out_line(&o, "HDCP repeater: %s", (hdcp->bcaps & 0x40) ? "yes" : "no");
+        } else {
+            out_line(&o, "HDCP 1.4: key not ready");
+            out_line(&o, " (display in standby?)");
+        }
+        out_line(&o, "HDCP 2.2: %s", (hdcp->v2_read && (hdcp->v2 & 0x04)) ? "yes" : "no");
+    }
+    if(!scdc->ack) {
+        out_line(&o, "SCDC: no reply");
+    } else {
+        out_line(&o, "SCDC: version %u", scdc->sink_version);
+        if(scdc->device_id[0]) out_line(&o, "Chip: %s", scdc->device_id);
+        if(scdc->oui[0] || scdc->oui[1] || scdc->oui[2])
+            out_line(&o, "Chip OUI: %02X-%02X-%02X", scdc->oui[2], scdc->oui[1], scdc->oui[0]);
     }
 }

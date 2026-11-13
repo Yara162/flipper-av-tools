@@ -9,7 +9,8 @@ Video Game Module.
 | Combined module firmware | Official Video Game Module firmware (screen mirroring) plus a test pattern generator | [`firmware/`](firmware/) |
 | VGM Test Patterns app | Flipper app that selects patterns, resolution and a source label | [`apps/vgm_tpg/`](apps/vgm_tpg/) |
 | Pixel Fixer app | Flipper app that runs a rapid colour-noise loop for stuck pixels and image retention | [`apps/pixel_fixer/`](apps/pixel_fixer/) |
-| EDID Reader app | Flipper app that reads and decodes a display's EDID through an HDMI breakout board | [`apps/edid_reader/`](apps/edid_reader/) |
+| EDID Reader app | Flipper app that reads and decodes a display's EDID, and checks HDCP and HDMI 2.0 support, through an HDMI breakout board | [`apps/edid_reader/`](apps/edid_reader/) |
+| CEC Tool app | Flipper app that monitors HDMI-CEC traffic and sends power, input and volume commands | [`apps/cec_tool/`](apps/cec_tool/) |
 | IR converter | Browser page that converts Flipper `.ir` files to Pronto hex and Global Caché `sendir` | [`ir-converter/`](ir-converter/) |
 | BadUSB scripts | USB HID path test and keep-awake scripts | [`badusb/`](badusb/) |
 
@@ -37,7 +38,9 @@ The apps are built for Flipper firmware 1.5.1 (API 88.2). Rebuild them with
 | VGM Test Patterns app | Working on real hardware |
 | Firmware v4 noise pattern and the Pixel Fixer app | Tested on a host build only, not yet on hardware |
 | 720x480 and 1280x720 30 Hz modes | Not confirmed on hardware; 720p overclocks the module and uses a non-standard timing |
-| EDID Reader app | Decoder checked against `edid-decode` on 398 real EDIDs; pin driver not yet run on hardware |
+| EDID Reader app: EDID read and decode | Working on real hardware; decoder also checked against `edid-decode` on 398 real EDIDs |
+| EDID Reader app: HDCP and HDMI 2.0 live check | Not yet run on hardware |
+| CEC Tool app | Protocol decoder passes host tests; not yet run on a real bus |
 | IR converter | Unit tests pass against known LG, Samsung and Sony codes; not yet fired at a real device |
 | BadUSB scripts | Written from the firmware's script documentation; not yet run |
 

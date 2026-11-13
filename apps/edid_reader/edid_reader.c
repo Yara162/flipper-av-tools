@@ -6,6 +6,9 @@
 //   HDMI 17 (GND)  -> pin 18 (GND)
 //   HDMI 18 (+5V)  -> pin 1  (5V)   powers the display's EDID memory
 //
+// After the EDID it also asks the display's HDCP port and HDMI 2.0 status registers what
+// they support.
+//
 // The I2C bus is bit-banged slowly on open-drain pins with the Flipper's internal pull-ups,
 // so no external resistors are needed.
 #include <furi.h>
@@ -20,8 +23,8 @@
 #define HALF_PERIOD_US 100 // about 5 kHz: slow enough for weak pull-ups and long cables
 #define STRETCH_TIMEOUT_US 3000
 #define POWER_SETTLE_MS 400
-#define REPORT_SIZE 2048
-#define MAX_LINES 120
+#define REPORT_SIZE 2560
+#define MAX_LINES 150
 #define VISIBLE_LINES 7
 
 typedef enum { ScreenWiring, ScreenReading, ScreenReport } Screen;
@@ -35,6 +38,8 @@ typedef struct {
     uint8_t edid[EDID_BLOCK_SIZE * EDID_MAX_BLOCKS];
     char report[REPORT_SIZE];
     const char* lines[MAX_LINES];
+    HdcpProbe hdcp;
+    ScdcProbe scdc;
     size_t line_count, scroll;
 } App;
 
@@ -148,6 +153,40 @@ static bool edid_read_block(uint8_t index, uint8_t* dst) {
     return ok;
 }
 
+// Read `len` bytes starting at register `reg` of the device at 8-bit write address `addr`
+static bool i2c_read_reg(uint8_t addr, uint8_t reg, uint8_t* dst, size_t len) {
+    i2c_start();
+    bool ok = i2c_write(addr) && i2c_write(reg);
+    if(ok) {
+        i2c_start();
+        ok = i2c_write(addr | 1);
+    }
+    if(ok) {
+        for(size_t i = 0; i < len; i++) dst[i] = i2c_read(i < len - 1);
+    }
+    i2c_stop();
+    return ok;
+}
+
+// HDCP receiver port (0x74) and HDMI 2.0 status and control registers (0xA8)
+static void probe_live(HdcpProbe* hdcp, ScdcProbe* scdc) {
+    memset(hdcp, 0, sizeof(*hdcp));
+    memset(scdc, 0, sizeof(*scdc));
+    hdcp->port_ack = i2c_read_reg(0x74, 0x00, hdcp->bksv, 5);
+    if(hdcp->port_ack) {
+        i2c_read_reg(0x74, 0x40, &hdcp->bcaps, 1);
+        hdcp->v2_read = i2c_read_reg(0x74, 0x50, &hdcp->v2, 1);
+    }
+    scdc->ack = i2c_read_reg(0xA8, 0x01, &scdc->sink_version, 1);
+    if(scdc->ack) {
+        uint8_t id[11] = {0};
+        if(i2c_read_reg(0xA8, 0xD0, id, sizeof(id))) {
+            memcpy(scdc->oui, id, 3);
+            for(int i = 0; i < 8; i++) scdc->device_id[i] = (id[3 + i] >= 32 && id[3 + i] < 127) ? (char)id[3 + i] : 0;
+        }
+    }
+}
+
 static ReadStatus edid_read_all(App* app, size_t* blocks) {
     *blocks = 0;
     // Supply +5V to HDMI pin 18 unless it is already on (for example from USB)
@@ -182,6 +221,8 @@ static ReadStatus edid_read_all(App* app, size_t* blocks) {
             }
         }
     }
+
+    if(status == ReadOk) probe_live(&app->hdcp, &app->scdc);
 
     i2c_pins_release();
     if(!otg_was_on) furi_hal_power_disable_otg();
@@ -236,6 +277,7 @@ static void do_read(App* app) {
         EdidInfo info;
         edid_decode(app->edid, blocks, app->report, REPORT_SIZE, &info);
         if(info.header_ok) {
+            edid_format_live(&app->hdcp, &app->scdc, app->report, REPORT_SIZE);
             Storage* storage = furi_record_open(RECORD_STORAGE);
             char name[24];
             snprintf(name, sizeof(name), "%s%04X.bin", info.mfr, info.product);
