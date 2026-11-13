@@ -48,6 +48,12 @@ The apps are built for Flipper firmware 1.5.1 (API 88.2). Rebuild them with
   display pixels wide.
 - The output is DVI-style video with no audio.
 
+## Licence
+
+Copyright (C) 2026 Yara162. Released under the [GNU General Public License v3.0](LICENSE):
+you may use, change and redistribute this work, provided you keep the copyright and
+licence notices (that is, give credit) and release your changes under the same licence.
+
 ## Credits
 
 - The combined firmware is a patch on top of
