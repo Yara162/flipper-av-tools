@@ -39,8 +39,8 @@ The apps are built for Flipper firmware 1.5.1 (API 88.2). Rebuild them with
 | Firmware v4 noise pattern and the Pixel Fixer app | Tested on a host build only, not yet on hardware |
 | 720x480 and 1280x720 30 Hz modes | Not confirmed on hardware; 720p overclocks the module and uses a non-standard timing |
 | EDID Reader app: EDID read and decode | Working on real hardware; decoder also checked against `edid-decode` on 398 real EDIDs |
-| EDID Reader app: HDCP and HDMI 2.0 live check | Not yet run on hardware |
-| CEC Tool app | Protocol decoder passes host tests; not yet run on a real bus |
+| EDID Reader app: HDCP and HDMI 2.0 live check | Working on real hardware |
+| CEC Tool app | Working on real hardware: standby, power on and volume up/down confirmed on an Insignia Fire TV. Other commands and inline monitoring between two devices not yet confirmed |
 | IR converter | Unit tests pass against known LG, Samsung and Sony codes; not yet fired at a real device |
 | BadUSB scripts | Written from the firmware's script documentation; not yet run |
 

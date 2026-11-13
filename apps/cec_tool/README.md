@@ -61,6 +61,8 @@ on a PC.
 
 ## Status
 
-The decoder and message naming pass host tests, including timing jitter, messages cut
-short and random input. Receiving and sending on a real bus have not yet been run on
-hardware; CEC bit timing is the part most likely to need tuning.
+Working on real hardware: standby, power on, volume up and volume down were confirmed on
+an Insignia Fire TV with the board connected to the display. The decoder and message
+naming also pass host tests, including timing jitter, messages cut short and random
+input. The remaining commands, and monitoring in line between a source and a display,
+have not yet been confirmed.

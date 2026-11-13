@@ -65,8 +65,8 @@ ufbt
 Reading and decoding EDIDs works on real displays. The decoder agrees with `edid-decode`
 on manufacturer, product, native timing, maximum TMDS rate, CEC address, checksums and
 4K60 support for 398 of 398 real-world EDIDs sampled from the linuxhw/EDID collection,
-and on HDMI 2.1 link rate for all 1,165 samples checked. The HDCP and SCDC live check has
-not yet run on hardware.
+and on HDMI 2.1 link rate for all 1,165 samples checked. The HDCP and SCDC live check also
+works on real hardware.
 
 Known limits: reads up to four blocks; DisplayID blocks are listed but not decoded; the
 bus runs at 3.3 V logic, which a few displays may not accept.
