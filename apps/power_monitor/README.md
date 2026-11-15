@@ -61,6 +61,5 @@ ufbt
 
 ## Status
 
-Compiles against Flipper firmware 1.5.1 and the charge and energy arithmetic is checked,
-but it is not yet working on hardware: a first wiring attempt did not give readings, and
-the cause has not been found.
+Working on real hardware: the app finds the sensor and shows live readings. The readings
+have not yet been checked against a known load, so their accuracy is unconfirmed.
