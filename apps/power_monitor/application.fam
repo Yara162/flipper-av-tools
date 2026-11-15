@@ -1,0 +1,11 @@
+App(
+    appid="power_monitor",
+    name="Power Monitor",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="power_monitor_app",
+    requires=["gui", "storage"],
+    stack_size=4 * 1024,
+    fap_category="GPIO",
+    fap_version="0.1",
+    fap_description="DC voltage, current and power meter with logging, using an INA219 sensor",
+)

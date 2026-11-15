@@ -1,0 +1,11 @@
+App(
+    appid="lux_meter",
+    name="Lux Meter",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="lux_meter_app",
+    requires=["gui", "storage"],
+    stack_size=4 * 1024,
+    fap_category="GPIO",
+    fap_version="0.1",
+    fap_description="Light meter and nine-point projector brightness test with a BH1750 sensor",
+)
