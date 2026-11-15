@@ -61,5 +61,6 @@ ufbt
 
 ## Status
 
-Compiles against Flipper firmware 1.5.1; the charge and energy arithmetic is checked. Not
-yet run on hardware.
+Compiles against Flipper firmware 1.5.1 and the charge and energy arithmetic is checked,
+but it is not yet working on hardware: a first wiring attempt did not give readings, and
+the cause has not been found.

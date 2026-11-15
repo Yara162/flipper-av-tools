@@ -63,5 +63,5 @@ ufbt
 
 ## Status
 
-Compiles against Flipper firmware 1.5.1; the area and lumen arithmetic is checked. Not
-yet run on hardware.
+Working on real hardware: the live meter and the nine-point test, including the saved
+report.

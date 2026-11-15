@@ -45,8 +45,8 @@ The apps are built for Flipper firmware 1.5.1 (API 88.2). Rebuild them with
 | EDID Reader app: HDCP and HDMI 2.0 live check | Working on real hardware |
 | CEC Tool app | Working on real hardware: standby, power on and volume up/down confirmed on an Insignia Fire TV. Other commands and inline monitoring between two devices not yet confirmed |
 | HDMI Link Monitor app | Not yet run on hardware |
-| Lux Meter app | Not yet run on hardware |
-| Power Monitor app | Not yet run on hardware |
+| Lux Meter app | Working on real hardware, including the nine-point test |
+| Power Monitor app | Not yet working on hardware: first wiring attempt did not give readings |
 | IR converter | Unit tests pass against known LG, Samsung and Sony codes; not yet fired at a real device |
 | BadUSB scripts | Written from the firmware's script documentation; not yet run |
 
