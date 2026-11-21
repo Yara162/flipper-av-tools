@@ -1,0 +1,12 @@
+# Copy to .github/workflows/flipper-ci.yml in an app repository.
+# Builds every app on each push and pull request; on a tag push (git tag v1.2.0 && git push --tags)
+# it also creates the GitHub release and attaches the .fap files.
+name: flipper-ci
+on:
+  push:
+  pull_request:
+jobs:
+  build:
+    uses: Yara162/Master-AV-Flipper/.github/workflows/build-fap.yml@main
+    permissions:
+      contents: write

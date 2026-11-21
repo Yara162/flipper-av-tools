@@ -1,5 +1,7 @@
 # Flipper AV Tools
 
+[![flipper-ci](https://github.com/Yara162/flipper-av-tools/actions/workflows/flipper-ci.yml/badge.svg)](https://github.com/Yara162/flipper-av-tools/actions/workflows/flipper-ci.yml)
+
 Tools that turn a Flipper Zero into a pocket helper for AV systems programming and
 commissioning. The main piece is a test pattern generator built on the Flipper Zero
 Video Game Module.
