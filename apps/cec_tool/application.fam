@@ -6,6 +6,7 @@ App(
     requires=["gui"],
     stack_size=4 * 1024,
     fap_category="GPIO",
+    fap_icon="icon.png",
     fap_version="0.1",
     fap_description="HDMI-CEC monitor and controller for use with an HDMI breakout board",
 )

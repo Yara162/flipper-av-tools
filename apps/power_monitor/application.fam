@@ -6,6 +6,7 @@ App(
     requires=["gui", "storage"],
     stack_size=4 * 1024,
     fap_category="GPIO",
+    fap_icon="icon.png",
     fap_version="0.1",
     fap_description="DC voltage, current and power meter with logging, using an INA219 sensor",
 )
